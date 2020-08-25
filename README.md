@@ -31,6 +31,11 @@ To check that deleted/renamed files in your git repo are in your redirects,
 1. Make sure `rediraffe_branch` and `rediraffe_redirects` are set in conf.py.
 2. Run the `rediraffecheckdiff` builder.
 
+### Auto Redirect builder
+For convenience, an auto redirect builder has been added. Ensure that `rediraffe_auto_redirect = True` is in your conf.py. Then simply run the `rediraffewritediff` builder.
+
+Note: The auto redirect builder only works with a configuration file.
+
 ## Options
 These values are placed in the conf.py of your sphinx project.
 
