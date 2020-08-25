@@ -342,13 +342,13 @@ class CheckRedirectsDiffBuilder(Builder):
                                 len(self.app.srcdir) + 1 :
                             ]
 
-                            from_fancy_path = "\"" + from_fancy_path.replace("\\", "/") + "\""
+                            from_fancy_path = (
+                                '"' + from_fancy_path.replace("\\", "/") + '"'
+                            )
 
-                            to_fancy_path = str(hint_to)[
-                                len(self.app.srcdir) + 1 :
-                            ]
+                            to_fancy_path = str(hint_to)[len(self.app.srcdir) + 1 :]
 
-                            to_fancy_path = "\"" + to_fancy_path.replace("\\", "/") + "\""
+                            to_fancy_path = '"' + to_fancy_path.replace("\\", "/") + '"'
 
                             file.write(from_fancy_path + " " + to_fancy_path + "\n")
                             logger.info(
