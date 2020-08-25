@@ -291,7 +291,6 @@ class CheckRedirectsDiffBuilder(Builder):
                 continue
             if path_rename_to == None:
                 continue
-
             rename_hints[path_rename_from] = (path_rename_to, perc)
 
         # run git diff
@@ -320,6 +319,8 @@ class CheckRedirectsDiffBuilder(Builder):
                 logger.error(err_msg)
                 self.app.statuscode = 1
 
+        file = open(path, "a")
+
         for renamed_file in rename_hints:
             hint_to, perc = rename_hints[renamed_file]
             if renamed_file in absolute_redirects:
@@ -327,12 +328,48 @@ class CheckRedirectsDiffBuilder(Builder):
                     f"renamed file {renamed_file} redirects to {absolute_redirects[renamed_file]}."
                 )
             else:
-                err_msg = (
-                    f"{red('(broken)')} {renamed_file} was deleted but is not redirected!"
-                    f" Hint: This file was renamed to {hint_to} with a similarity of {perc}%."
-                )
-                logger.error(err_msg)
-                self.app.statuscode = 1
+                if self.app.config.rediraffe_auto_redirect and not path.is_file():
+                    logger.warning(
+                        f"{red('(broken)')} Automatic redirects is only available with a redirects file."
+                    )
+                elif (
+                    self.app.config.rediraffe_auto_redirect
+                    and "rediraffewritediff" in self.name
+                ):
+                    if path_rename_from not in absolute_redirects:
+                        if perc >= self.app.config.rediraffe_auto_redirect_perc:
+                            from_fancy_path = str(renamed_file)[
+                                len(self.app.srcdir) + 1 :
+                            ]
+
+                            from_fancy_path = "\"" + from_fancy_path.replace("\\", "/") + "\""
+
+                            to_fancy_path = str(hint_to)[
+                                len(self.app.srcdir) + 1 :
+                            ]
+
+                            to_fancy_path = "\"" + to_fancy_path.replace("\\", "/") + "\""
+
+                            file.write(from_fancy_path + " " + to_fancy_path + "\n")
+                            logger.info(
+                                f"{green('(okay)')} Renamed file {renamed_file} has been redirected to {hint_to} in your redirects file!"
+                            )
+                        else:
+                            err_msg = (
+                                f"{red('(broken)')} {renamed_file} was deleted but is not redirected!"
+                                f" Hint: This file was renamed to {hint_to} with a similarity of {perc}%."
+                            )
+                            logger.error(err_msg)
+                            self.app.statuscode = 1
+                else:
+                    err_msg = (
+                        f"{red('(broken)')} {renamed_file} was deleted but is not redirected!"
+                        f" Hint: This file was renamed to {hint_to} with a similarity of {perc}%."
+                    )
+                    logger.error(err_msg)
+                    self.app.statuscode = 1
+
+        file.close()
 
     def get_outdated_docs(self):
         return []
@@ -347,12 +384,22 @@ class CheckRedirectsDiffBuilder(Builder):
         return ""
 
 
+class WriteRedirectsDiffBuilder(CheckRedirectsDiffBuilder):
+    name = "rediraffewritediff"
+
+    def init(self) -> None:
+        super().init()
+
+
 def setup(app: Sphinx) -> Dict[str, Any]:
     app.add_config_value("rediraffe_redirects", "", None)
     app.add_config_value("rediraffe_branch", "", None)
     app.add_config_value("rediraffe_template", None, None)
+    app.add_config_value("rediraffe_auto_redirect", False, None)
+    app.add_config_value("rediraffe_auto_redirect_perc", 100, None)
 
     app.add_builder(CheckRedirectsDiffBuilder)
+    app.add_builder(WriteRedirectsDiffBuilder)
     app.connect("build-finished", build_redirects)
 
     return {
