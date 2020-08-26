@@ -234,16 +234,17 @@ class CheckRedirectsDiffBuilder(Builder):
         src_path = Path(self.app.srcdir)
 
         rediraffe_redirects = self.app.config.rediraffe_redirects
+        redirects_path = None
         if isinstance(rediraffe_redirects, dict):
             pass
         elif isinstance(rediraffe_redirects, str):
-            path = Path(src_path) / rediraffe_redirects
-            if not path.is_file():
+            redirects_path = Path(src_path) / rediraffe_redirects
+            if not redirects_path.is_file():
                 logger.error(red("rediraffe: rediraffe_redirects file does not exist."))
                 self.app.statuscode = 1
                 return
             try:
-                rediraffe_redirects = create_graph(path)
+                rediraffe_redirects = create_graph(redirects_path)
             except ExtensionError as e:
                 self.app.statuscode = 1
                 return
@@ -319,57 +320,34 @@ class CheckRedirectsDiffBuilder(Builder):
                 logger.error(err_msg)
                 self.app.statuscode = 1
 
-        file = open(path, "a")
+        with redirects_path.open("a") as redirects_file:
 
-        for renamed_file in rename_hints:
-            hint_to, perc = rename_hints[renamed_file]
-            if renamed_file in absolute_redirects:
-                logger.info(
-                    f"renamed file {renamed_file} redirects to {absolute_redirects[renamed_file]}."
+            for renamed_file in rename_hints:
+                hint_to, perc = rename_hints[renamed_file]
+
+                if renamed_file in absolute_redirects:
+                    logger.info(
+                        f"renamed file {renamed_file} redirects to {absolute_redirects[renamed_file]}."
+                    )
+                    continue
+
+                if self.name == "rediraffewritediff":
+                    if perc >= self.app.config.rediraffe_auto_redirect_perc:
+                        rel_rename_from = f'"{relpath(renamed_file, src_path)}"'
+                        rel_rename_to = f'"{relpath(hint_to, src_path)}"'
+                        redirects_file.write(f"{rel_rename_from} {rel_rename_to}\n")
+                        logger.info(
+                            f"{green('(okay)')} Renamed file {rel_rename_from} has been redirected to {rel_rename_to} in your redirects file!"
+                        )
+                        continue
+
+                err_msg = (
+                    f"{red('(broken)')} {renamed_file} was deleted but is not redirected!"
+                    f" Hint: This file was renamed to {hint_to} with a similarity of {perc}%."
                 )
-            else:
-                if self.app.config.rediraffe_auto_redirect and not path.is_file():
-                    logger.warning(
-                        f"{red('(broken)')} Automatic redirects is only available with a redirects file."
-                    )
-                elif (
-                    self.app.config.rediraffe_auto_redirect
-                    and "rediraffewritediff" in self.name
-                ):
-                    if path_rename_from not in absolute_redirects:
-                        if perc >= self.app.config.rediraffe_auto_redirect_perc:
-                            from_fancy_path = str(renamed_file)[
-                                len(self.app.srcdir) + 1 :
-                            ]
+                logger.error(err_msg)
+                self.app.statuscode = 1
 
-                            from_fancy_path = (
-                                '"' + from_fancy_path.replace("\\", "/") + '"'
-                            )
-
-                            to_fancy_path = str(hint_to)[len(self.app.srcdir) + 1 :]
-
-                            to_fancy_path = '"' + to_fancy_path.replace("\\", "/") + '"'
-
-                            file.write(from_fancy_path + " " + to_fancy_path + "\n")
-                            logger.info(
-                                f"{green('(okay)')} Renamed file {renamed_file} has been redirected to {hint_to} in your redirects file!"
-                            )
-                        else:
-                            err_msg = (
-                                f"{red('(broken)')} {renamed_file} was deleted but is not redirected!"
-                                f" Hint: This file was renamed to {hint_to} with a similarity of {perc}%."
-                            )
-                            logger.error(err_msg)
-                            self.app.statuscode = 1
-                else:
-                    err_msg = (
-                        f"{red('(broken)')} {renamed_file} was deleted but is not redirected!"
-                        f" Hint: This file was renamed to {hint_to} with a similarity of {perc}%."
-                    )
-                    logger.error(err_msg)
-                    self.app.statuscode = 1
-
-        file.close()
 
     def get_outdated_docs(self):
         return []
@@ -388,14 +366,20 @@ class WriteRedirectsDiffBuilder(CheckRedirectsDiffBuilder):
     name = "rediraffewritediff"
 
     def init(self) -> None:
-        super().init()
+        rediraffe_redirects = self.app.config.rediraffe_redirects
+        if not isinstance(rediraffe_redirects, str):
+            logger.error(
+                f"{red('(broken)')} Automatic redirects is only available with a redirects file."
+            )
+            self.app.statuscode = 1
+            return
 
+        super().init()
 
 def setup(app: Sphinx) -> Dict[str, Any]:
     app.add_config_value("rediraffe_redirects", "", None)
     app.add_config_value("rediraffe_branch", "", None)
     app.add_config_value("rediraffe_template", None, None)
-    app.add_config_value("rediraffe_auto_redirect", False, None)
     app.add_config_value("rediraffe_auto_redirect_perc", 100, None)
 
     app.add_builder(CheckRedirectsDiffBuilder)
